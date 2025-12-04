@@ -1,0 +1,182 @@
+<script>
+  const API_BASE = ""; 
+  // Se o frontend e o backend estiverem no mesmo servidor/porta, pode deixar vazio.
+  // Se em outro lugar: ex: const API_BASE = "http://192.168.0.50:3000";
+
+  function generateId() {
+    return Date.now().toString(36) + Math.random().toString(16).slice(2);
+  }
+
+  async function fetchTasks(filters = {}) {
+    const params = new URLSearchParams(filters);
+    const res = await fetch(`${API_BASE}/api/tasks?` + params.toString());
+    return await res.json();
+  }
+
+  async function createTask(task) {
+    await fetch(`${API_BASE}/api/tasks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(task),
+    });
+  }
+
+  async function patchTask(id, updates) {
+    await fetch(`${API_BASE}/api/tasks/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+  }
+
+  async function removeTask(id) {
+    await fetch(`${API_BASE}/api/tasks/${id}`, {
+      method: "DELETE",
+    });
+  }
+
+  function formatDate(dateStr) {
+    if (!dateStr) return "-";
+    const [year, month, day] = dateStr.split("-");
+    return `${day}/${month}/${year}`;
+  }
+
+  async function renderTasks() {
+    const container = document.getElementById("tasksContainer");
+    const emptyState = document.getElementById("emptyState");
+    container.innerHTML = "";
+
+    const statusFilter = document.getElementById("filterStatus").value;
+    const priorityFilter = document.getElementById("filterPriority").value;
+    const textFilter = document.getElementById("filterText").value;
+
+    const tasks = await fetchTasks({
+      status: statusFilter,
+      priority: priorityFilter,
+      text: textFilter,
+    });
+
+    if (!tasks.length) {
+      emptyState.style.display = "block";
+      return;
+    } else {
+      emptyState.style.display = "none";
+    }
+
+    tasks.forEach(task => {
+      const div = document.createElement("div");
+      div.className = "task";
+
+      if (task.priority === "Alta") div.style.borderLeftColor = "#b91c1c";
+      if (task.priority === "Média") div.style.borderLeftColor = "#d97706";
+      if (task.priority === "Baixa") div.style.borderLeftColor = "#047857";
+
+      div.innerHTML = `
+        <div class="task-header">
+          <div>
+            <div class="task-title">${task.title}</div>
+            <div class="task-meta">
+              ${task.location ? `Local: ${task.location} · ` : ""}Criada em: ${new Date(task.createdAt).toLocaleString("pt-BR")}
+            </div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:4px; align-items:flex-end;">
+            <span class="badge badge-status">${task.status}</span>
+            <span class="badge badge-priority-${task.priority}">${task.priority}</span>
+          </div>
+        </div>
+        ${task.description ? `<div class="task-meta" style="margin-top:4px;">${task.description}</div>` : ""}
+        <div class="task-meta">Prazo: ${formatDate(task.dueDate || "")}</div>
+      `;
+
+      const actions = document.createElement("div");
+      actions.className = "task-actions";
+
+      if (task.status !== "A fazer") {
+        const btnToDo = document.createElement("button");
+        btnToDo.className = "btn-secondary";
+        btnToDo.textContent = "Voltar p/ A fazer";
+        btnToDo.onclick = async () => {
+          await patchTask(task.id, { status: "A fazer" });
+          renderTasks();
+        };
+        actions.appendChild(btnToDo);
+      }
+
+      if (task.status !== "Em andamento") {
+        const btnDoing = document.createElement("button");
+        btnDoing.className = "btn-secondary";
+        btnDoing.textContent = "Em andamento";
+        btnDoing.onclick = async () => {
+          await patchTask(task.id, { status: "Em andamento" });
+          renderTasks();
+        };
+        actions.appendChild(btnDoing);
+      }
+
+      if (task.status !== "Concluído") {
+        const btnDone = document.createElement("button");
+        btnDone.className = "btn-primary";
+        btnDone.textContent = "Concluir";
+        btnDone.onclick = async () => {
+          await patchTask(task.id, { status: "Concluído" });
+          renderTasks();
+        };
+        actions.appendChild(btnDone);
+      }
+
+      const btnDel = document.createElement("button");
+      btnDel.className = "btn-danger";
+      btnDel.textContent = "Excluir";
+      btnDel.onclick = async () => {
+        if (confirm("Tem certeza que deseja excluir esta tarefa?")) {
+          await removeTask(task.id);
+          renderTasks();
+        }
+      };
+      actions.appendChild(btnDel);
+
+      div.appendChild(actions);
+      container.appendChild(div);
+    });
+  }
+
+  document.getElementById("addTaskBtn").addEventListener("click", async () => {
+    const title = document.getElementById("title").value.trim();
+    const location = document.getElementById("location").value.trim();
+    const priority = document.getElementById("priority").value;
+    const dueDate = document.getElementById("dueDate").value;
+    const description = document.getElementById("description").value.trim();
+
+    if (!title) {
+      alert("Coloca pelo menos um título na tarefa 😊");
+      return;
+    }
+
+    const task = {
+      id: generateId(),
+      title,
+      location,
+      priority,
+      dueDate,
+      description,
+      status: "A fazer",
+      createdAt: new Date().toISOString(),
+    };
+
+    await createTask(task);
+
+    document.getElementById("title").value = "";
+    document.getElementById("location").value = "";
+    document.getElementById("description").value = "";
+    document.getElementById("dueDate").value = "";
+    document.getElementById("priority").value = "Média";
+
+    renderTasks();
+  });
+
+  ["filterStatus", "filterPriority", "filterText"].forEach(id => {
+    document.getElementById(id).addEventListener("input", renderTasks);
+  });
+
+  document.addEventListener("DOMContentLoaded", renderTasks);
+</script>
